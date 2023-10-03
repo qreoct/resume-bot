@@ -1,8 +1,6 @@
-import { kv } from '@vercel/kv'
 import { OpenAIStream, StreamingTextResponse } from 'ai'
 import { Configuration, OpenAIApi } from 'openai-edge'
 
-import { auth } from '@/auth'
 import { nanoid } from '@/lib/utils'
 
 export const runtime = 'edge'
@@ -16,7 +14,7 @@ const openai = new OpenAIApi(configuration)
 export async function POST(req: Request) {
   const json = await req.json()
   const { messages, previewToken } = json
-  const userId = (await auth())?.user.id
+  const userId = process.env.USERID
 
   if (!userId) {
     return new Response('Unauthorized', {
@@ -29,7 +27,7 @@ export async function POST(req: Request) {
   }
 
   const res = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4',
     messages,
     temperature: 0.7,
     stream: true
@@ -55,11 +53,11 @@ export async function POST(req: Request) {
           }
         ]
       }
-      await kv.hmset(`chat:${id}`, payload)
-      await kv.zadd(`user:chat:${userId}`, {
-        score: createdAt,
-        member: `chat:${id}`
-      })
+      // await kv.hmset(`chat:${id}`, payload)
+      // await kv.zadd(`user:chat:${userId}`, {
+      //   score: createdAt,
+      //   member: `chat:${id}`
+      // })
     }
   })
 
