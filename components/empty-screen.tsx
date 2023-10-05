@@ -24,7 +24,7 @@ export function EmptyScreen({ setInput }: Pick<UseChatHelpers, 'setInput'>) {
     <div className="mx-auto max-w-2xl px-4">
       <div className="rounded-lg border bg-background p-8">
         <h1 className="mb-2 text-lg font-semibold">
-          Welcome to Jefferson's Resume Chatbot!
+          Welcome to Jefferson&apos;s Resume Chatbot!
         </h1>
         <p className="leading-normal text-muted-foreground">
           Feel free to ask questions you might have about me:
