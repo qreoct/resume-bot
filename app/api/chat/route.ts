@@ -4,6 +4,7 @@ import { NextApiResponse } from 'next'
 import { Configuration, OpenAIApi } from 'openai-edge';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { ChatCompletionRequestMessage } from 'openai-edge/types/types/chat';
+import { promptIsClean } from '@/lib/promptCheck';
 
 export const runtime = 'edge'
 
@@ -19,6 +20,7 @@ const pinecone = new Pinecone({
 export async function POST(req: Request, res: NextApiResponse) {
   const json = await req.json()
   const { messages } = json
+  const latestMesssage = messages[messages.length - 1].content;
   const userId = process.env.USERID
 
   if (!userId) {
@@ -55,7 +57,7 @@ export async function POST(req: Request, res: NextApiResponse) {
 
     const queryResponse = await index.query({
       vector: embedding,
-      topK: 3,
+      topK: 2,
       includeMetadata: true,
     });
 
@@ -70,6 +72,8 @@ export async function POST(req: Request, res: NextApiResponse) {
         contextsRetrieved.push(result['metadata']['text'])
       }
     }
+
+    console.log("matches and fetched is " + JSON.stringify(queryResponse['matches']));
 
     const prompt_start = (
       "You are an AI agent representing me in an interview.\n" +
@@ -91,7 +95,16 @@ export async function POST(req: Request, res: NextApiResponse) {
     return context;
   }
 
-  let vectorContext = await getContext(messages[messages.length - 1].content)
+  if (!promptIsClean(latestMesssage)) {
+    return new StreamingTextResponse(OpenAIStream(await openai.createChatCompletion({
+      model: 'gpt-3.5-turbo',
+      messages: [{content: `Say that you don't know or can't perform that task.`, role: 'user'}],
+      temperature: 0.7,
+      stream: true
+    })))
+  }
+
+  let vectorContext = await getContext(latestMesssage)
 
   let promptMessages = [
     {
@@ -99,14 +112,16 @@ export async function POST(req: Request, res: NextApiResponse) {
       role: 'system'
     },
     {
-      content: "According to only the information provided within the resume above, " + messages[messages.length - 1].content +
-      "\nKeep your answer succint, impactful, and clear.",
+      content: "You are talking to a curious recruiter with my resume. " +
+        "According to only the information provided within the resume above, answer this query: " + latestMesssage +
+        "\nKeep your answer succint, impactful, clear, and within 100 words." + 
+        "\nImbue the response with a friendly, light-hearted and good-natured tone. Represent Jefferson in a positive light.",
       role: 'user'
     }
   ] as ChatCompletionRequestMessage[]
 
   const aiChatCompletion = await openai.createChatCompletion({
-    model: 'gpt-4',
+    model: 'gpt-3.5-turbo',
     messages: promptMessages,
     temperature: 0.7,
     stream: true
