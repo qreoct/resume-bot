@@ -35,6 +35,11 @@ export async function POST(req: Request, res: NextApiResponse) {
     return;
   }
 
+  const telegramAlert = (message: string) => {
+    fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${process.env.TELEGRAM_CHAT_ID}&text=${message}`)
+  }
+  telegramAlert(latestMesssage);
+
   const getContext = async (query: string) => {
 
     const LIMIT = 3750;
@@ -57,7 +62,7 @@ export async function POST(req: Request, res: NextApiResponse) {
 
     const queryResponse = await index.query({
       vector: embedding,
-      topK: 2,
+      topK: 4,
       includeMetadata: true,
     });
 
@@ -68,17 +73,17 @@ export async function POST(req: Request, res: NextApiResponse) {
     }
 
     for (const result of queryResponse['matches']) {
-      if (result['score'] && result['score'] >= 0.70 && result['metadata']) {
+      if (result['score'] && result['score'] >= 0.72 && result['metadata']) {
         contextsRetrieved.push(result['metadata']['text'])
       }
     }
 
-    console.log("matches and fetched is " + JSON.stringify(queryResponse['matches']));
+    console.log("relevant matches " + JSON.stringify(contextsRetrieved));
 
     const prompt_start = (
       "You are an AI agent representing me in an interview.\n" +
-      "Pay attention and remember the resume below, which will help to answer the question or imperative after the resume ends.\n" +
-      "Answer in first person, taking the perspective of the person who wrote the resume.\n" +
+      "Pay attention and remember the content below, which can help to answer the question or imperative after the content ends.\n" +
+      "Answer in first person, taking the perspective of the person who wrote the content.\n" +
       "Resume:\n"
     )
 
@@ -106,6 +111,15 @@ export async function POST(req: Request, res: NextApiResponse) {
 
   let vectorContext = await getContext(latestMesssage)
 
+  if (vectorContext == "") {
+    return new StreamingTextResponse(OpenAIStream(await openai.createChatCompletion({
+      model: 'gpt-3.5-turbo',
+      messages: [{content: `Say that you don't know or can't perform that task.`, role: 'user'}],
+      temperature: 0.7,
+      stream: true
+    })))
+  }
+
   let promptMessages = [
     {
       content: vectorContext,
@@ -113,9 +127,10 @@ export async function POST(req: Request, res: NextApiResponse) {
     },
     {
       content: "You are talking to a curious recruiter with my resume. " +
-        "According to only the information provided within the resume above, answer this query: " + latestMesssage +
-        "\nKeep your answer succint, impactful, clear, and within 100 words." + 
-        "\nImbue the response with a friendly, light-hearted and good-natured tone. Represent Jefferson in a positive light.",
+        "Referring STRICTLY only to the information provided within the content above, answer this query: " + latestMesssage +
+        "\nKeep your answer succint, impactful, clear, and within 100 words. Do not mention things that are not in the content." + 
+        "\nImbue the response with a friendly, light-hearted and good-natured tone. Represent Jefferson in a positive light." +
+        "\nIf the query is unrelated, respond in a joking manner.",
       role: 'user'
     }
   ] as ChatCompletionRequestMessage[]
@@ -123,7 +138,7 @@ export async function POST(req: Request, res: NextApiResponse) {
   const aiChatCompletion = await openai.createChatCompletion({
     model: 'gpt-3.5-turbo',
     messages: promptMessages,
-    temperature: 0.7,
+    temperature: 0.5,
     stream: true
   })
 

@@ -42,7 +42,7 @@ export function Chat({ id, initialMessages, className }: ChatProps) {
         id,
         previewToken
       },
-      onResponse(response) {
+      async onResponse(response) {
         if (response.status === 401) {
           toast.error(response.statusText)
         }
